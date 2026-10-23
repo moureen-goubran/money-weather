@@ -1,0 +1,40 @@
+key,lo,hi,months,rate,base,since,outcome,note
+cpi,,2.5,245,2,13,1960,a recession started within 12 months,Red happened 5 separate times since 1960; 4 were followed by a recession within 2 years (false alarms: 2022).
+cpi,2.5,3.5,182,8,13,1960,a recession started within 12 months,Red happened 5 separate times since 1960; 4 were followed by a recession within 2 years (false alarms: 2022).
+cpi,3.5,5,123,18,13,1960,a recession started within 12 months,Red happened 5 separate times since 1960; 4 were followed by a recession within 2 years (false alarms: 2022).
+cpi,5,,111,40,13,1960,a recession started within 12 months,Red happened 5 separate times since 1960; 4 were followed by a recession within 2 years (false alarms: 2022).
+realpay,,-1,90,33,14,1965,a recession started within 12 months,"Red happened 8 separate times since 1965; 5 were followed by a recession within 2 years (false alarms: 1987, 2011, 2022)."
+realpay,-1,0,139,9,14,1965,a recession started within 12 months,"Red happened 8 separate times since 1965; 5 were followed by a recession within 2 years (false alarms: 1987, 2011, 2022)."
+realpay,0,1,165,14,14,1965,a recession started within 12 months,"Red happened 8 separate times since 1965; 5 were followed by a recession within 2 years (false alarms: 1987, 2011, 2022)."
+realpay,1,,217,9,14,1965,a recession started within 12 months,"Red happened 8 separate times since 1965; 5 were followed by a recession within 2 years (false alarms: 1987, 2011, 2022)."
+core3m,,2.5,272,5,13,1960,a recession started within 12 months,"Red happened 11 separate times since 1960; 7 were followed by a recession within 2 years (false alarms: 1983, 1984, 2022, 2023)."
+core3m,2.5,3.5,134,10,13,1960,a recession started within 12 months,"Red happened 11 separate times since 1960; 7 were followed by a recession within 2 years (false alarms: 1983, 1984, 2022, 2023)."
+core3m,3.5,5,125,11,13,1960,a recession started within 12 months,"Red happened 11 separate times since 1960; 7 were followed by a recession within 2 years (false alarms: 1983, 1984, 2022, 2023)."
+core3m,5,,130,33,13,1960,a recession started within 12 months,"Red happened 11 separate times since 1960; 7 were followed by a recession within 2 years (false alarms: 1983, 1984, 2022, 2023)."
+misery,,8,265,8,13,1960,a recession started within 12 months,
+misery,8,10,187,13,13,1960,a recession started within 12 months,
+misery,10,,209,19,13,1960,a recession started within 12 months,
+m2,,0,15,0,30,1960,inflation was above 4% eighteen months later,Red happened 14 separate times since 1960; inflation went above 4% within 2 years after 9 of them.
+m2,0,6,258,22,30,1960,inflation was above 4% eighteen months later,Red happened 14 separate times since 1960; inflation went above 4% within 2 years after 9 of them.
+m2,6,8,196,21,30,1960,inflation was above 4% eighteen months later,Red happened 14 separate times since 1960; inflation went above 4% within 2 years after 9 of them.
+m2,8,,192,52,30,1960,inflation was above 4% eighteen months later,Red happened 14 separate times since 1960; inflation went above 4% within 2 years after 9 of them.
+realfed,,0,226,1,13,1960,a recession started within 12 months,Red happened 3 separate times since 1960; 3 were followed by a recession within 2 years.
+realfed,0,1,79,11,13,1960,a recession started within 12 months,Red happened 3 separate times since 1960; 3 were followed by a recession within 2 years.
+realfed,1,2.5,140,7,13,1960,a recession started within 12 months,Red happened 3 separate times since 1960; 3 were followed by a recession within 2 years.
+realfed,2.5,4,162,25,13,1960,a recession started within 12 months,Red happened 3 separate times since 1960; 3 were followed by a recession within 2 years.
+realfed,4,,54,41,13,1960,a recession started within 12 months,Red happened 3 separate times since 1960; 3 were followed by a recession within 2 years.
+curve,,0,89,69,22,1976,a recession started within 2 years,Red happened 6 separate times since 1976; 5 were followed by a recession within 2 years (false alarms: 2022).
+curve,0,0.5,114,34,22,1976,a recession started within 2 years,Red happened 6 separate times since 1976; 5 were followed by a recession within 2 years (false alarms: 2022).
+curve,0.5,1,86,9,22,1976,a recession started within 2 years,Red happened 6 separate times since 1976; 5 were followed by a recession within 2 years (false alarms: 2022).
+curve,1,,213,0,22,1976,a recession started within 2 years,Red happened 6 separate times since 1976; 5 were followed by a recession within 2 years (false alarms: 2022).
+jobs,,0.2,506,3,15,1960,the economy was in a recession or entered one within 3 months,"It crossed into red 9 times since 1960; 7 of those came during or right at the start of a recession (false alarms: 2003, 2024)."
+jobs,0.2,0.4,69,28,15,1960,the economy was in a recession or entered one within 3 months,"It crossed into red 9 times since 1960; 7 of those came during or right at the start of a recession (false alarms: 2003, 2024)."
+jobs,0.4,,178,44,15,1960,the economy was in a recession or entered one within 3 months,"It crossed into red 9 times since 1960; 7 of those came during or right at the start of a recession (false alarms: 2003, 2024)."
+saving,,4,53,23,13,1960,a recession started within 12 months,
+saving,4,5.5,95,13,13,1960,a recession started within 12 months,
+saving,5.5,8,193,2,13,1960,a recession started within 12 months,
+saving,8,,320,18,13,1960,a recession started within 12 months,
+mood,,55,4,0,12,1978,a recession started within 12 months,
+mood,55,70,66,23,12,1978,a recession started within 12 months,
+mood,70,85,122,11,12,1978,a recession started within 12 months,
+mood,85,,291,11,12,1978,a recession started within 12 months,
