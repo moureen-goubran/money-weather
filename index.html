@@ -74,7 +74,8 @@ body{font-family:var(--font-anthropic-sans);font-size:var(--cds-font-size-body);
   };
   // Read straight from the repository so new data shows as soon as the bot saves it; fall back to this site's copy.
   const RAW='https://raw.githubusercontent.com/moureen-goubran/money-weather/main/';
-  const load=([id,url])=>d3.csv(RAW+url+'?v='+Date.now()).catch(()=>d3.csv(url+'?v='+Date.now())).then(rows=>{raw[id]=rows;});
+  const OPTIONAL={history:true};
+  const load=([id,url])=>d3.csv(RAW+url+'?v='+Date.now()).catch(()=>d3.csv(url+'?v='+Date.now())).catch(e=>{if(OPTIONAL[id])return [];throw e;}).then(rows=>{raw[id]=rows;});
   Promise.all(Object.entries(FILES).map(load))
     .then(()=>{state='ok';run();
       const m=raw.monthly[raw.monthly.length-1];const el=document.getElementById('mw-asof');
@@ -467,6 +468,7 @@ const statusRules=(ind,profit_ratio,gdp,history)=>{
   const one=v=>v==null?null:Math.round(v*10)/10;
   const NOT='Not tested: there is not enough free history to check this rule, so its color is my judgment.';
   const track=(key,v)=>{
+    if(!history.length)return {track:'Track record unavailable: the history.csv file is missing from the data folder.',record:''};
     const rows=history.filter(h=>h.key===key);if(!rows.length||v==null)return {track:NOT,record:''};
     const r=rows.find(h=>(h.lo===''||v>+h.lo)&&(h.hi===''||v<=+h.hi));if(!r)return {track:NOT,record:''};
     const range=r.lo===''?`${r.hi} or less`:r.hi===''?`above ${r.lo}`:`${r.lo} to ${r.hi}`;
