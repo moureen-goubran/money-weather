@@ -1,0 +1,30 @@
+name: Update economy data
+
+on:
+  schedule:
+    - cron: "23 14 * * 1"   # every Monday, 14:23 UTC (about 10:23 am New York)
+  workflow_dispatch:         # adds a "Run workflow" button for manual runs
+
+permissions:
+  contents: write            # lets the bot save the new CSV files, nothing else
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10      # stop if anything hangs
+    steps:
+      - uses: actions/checkout@v4   # made and maintained by GitHub itself
+
+      - name: Download the latest data
+        env:
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+        run: python3 fetch_data.py  # Python comes preinstalled on GitHub's machines
+
+      - name: Save changes, if any
+        run: |
+          git config user.name "money-weather-bot"
+          git config user.email "money-weather-bot@users.noreply.github.com"
+          git add data/
+          git diff --cached --quiet && echo "No new data" && exit 0
+          git commit -m "Update economy data"
+          git push
