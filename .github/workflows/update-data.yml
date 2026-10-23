@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10      # stop if anything hangs
     steps:
-      - uses: actions/checkout@v4   # made and maintained by GitHub itself
+      - uses: actions/checkout@v5   # made and maintained by GitHub itself
 
       - name: Download the latest data
         env:
