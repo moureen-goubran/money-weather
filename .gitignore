@@ -1,0 +1,5 @@
+# Never upload anything personal. Robinhood exports, statements and API keys live here locally only.
+private/
+*.env
+.env
+.DS_Store
