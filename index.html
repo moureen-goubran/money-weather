@@ -1,0 +1,760 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Money Weather Report</title>
+<meta name="description" content="A plain-English weekly read of the US economy: inflation, pay, rates, gold, jobs, spending and company profits, from public government data.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet">
+<style>
+/* Layout: one centered column of cards; tokens below are what page.html expects. */
+:root{
+  --color-bg:#f6f7f5; --color-panel:#ffffff; --color-fg:#1c2421; --color-fg-muted:#5c6762;
+  --color-border-line:#dfe3df; --color-ok:#2e7d4f; --color-warn:#a86b00; --color-bad:#c0392b;
+  --series-1:#2f6db5; --series-2:#c45a2c; --series-3:#3d8f6e; --series-4:#b08a1e;
+  --cds-chart-grid:#eceeeb; --cds-chart-axis:#9aa39e; --cds-chart-reference:#8b948f; --cds-chart-muted:#b7bfba;
+  --cds-chart-status-critical:#c0392b; --cds-surface-popover:#ffffff; --cds-border:#d5dad6;
+  --cds-shadow-popover:0 4px 16px rgba(20,30,25,.12); --cds-text-secondary:#5c6762;
+  --font-anthropic-sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-anthropic-serif:"Source Serif 4",Georgia,"Times New Roman",serif;
+  --cds-font-size-caption:.8125rem; --cds-font-size-body:.9375rem; --cds-font-size-heading:1.125rem; --cds-font-size-title:1.75rem;
+  --cds-font-weight-medium:500;
+  --cds-gap-xs:.25rem; --cds-gap-sm:.5rem; --cds-gap-md:1rem; --cds-gap-lg:1.5rem; --cds-gap-xl:2.25rem;
+  --cds-pad-xs:.25rem; --cds-pad-sm:.5rem; --cds-pad-md:1rem; --cds-pad-lg:1.25rem; --cds-pad-xl:2rem;
+  --cds-radius:10px; --cds-dur-slow:.4s; --cds-ease-out:cubic-bezier(.2,.7,.2,1);
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --color-bg:#121614; --color-panel:#1a201d; --color-fg:#e6ebe8; --color-fg-muted:#9aa59f;
+  --color-border-line:#2b332f; --color-ok:#5cc28a; --color-warn:#e0a73a; --color-bad:#ef6a5a;
+  --series-1:#6fa3e6; --series-2:#ee8a5c; --series-3:#62c09a; --series-4:#d9b44a;
+  --cds-chart-grid:#242b27; --cds-chart-axis:#55605a; --cds-chart-reference:#6c7771; --cds-chart-muted:#4a544f;
+  --cds-chart-status-critical:#ef6a5a; --cds-surface-popover:#202724; --cds-border:#34403a;
+  --cds-shadow-popover:0 4px 16px rgba(0,0,0,.45); --cds-text-secondary:#9aa59f; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --color-bg:#121614; --color-panel:#1a201d; --color-fg:#e6ebe8; --color-fg-muted:#9aa59f;
+  --color-border-line:#2b332f; --color-ok:#5cc28a; --color-warn:#e0a73a; --color-bad:#ef6a5a;
+  --series-1:#6fa3e6; --series-2:#ee8a5c; --series-3:#62c09a; --series-4:#d9b44a;
+  --cds-chart-grid:#242b27; --cds-chart-axis:#55605a; --cds-chart-reference:#6c7771; --cds-chart-muted:#4a544f;
+  --cds-chart-status-critical:#ef6a5a; --cds-surface-popover:#202724; --cds-border:#34403a;
+  --cds-shadow-popover:0 4px 16px rgba(0,0,0,.45); --cds-text-secondary:#9aa59f; color-scheme:dark}
+html,body{margin:0;background:var(--color-bg);color:var(--color-fg)}
+body{font-family:var(--font-anthropic-sans);font-size:var(--cds-font-size-body);line-height:1.45;
+  padding:max(24px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) 48px max(16px,env(safe-area-inset-left,0px))}
+#dash-root{max-width:76rem;margin-inline:auto}
+.mw-foot{max-width:76rem;margin:var(--cds-gap-xl) auto 0;font-size:var(--cds-font-size-caption);color:var(--color-fg-muted)}
+.mw-foot a{color:inherit}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script>
+/* Stand-in for the dashboard helper: loads data/*.csv, runs calculations, redraws. */
+(function(){
+  const FILES={monthly:'data/monthly.csv',retail:'data/retail.csv',profits:'data/profits.csv',gdp:'data/gdp.csv'};
+  const raw={},calcs={},memo={},subs=[];let state='loading',error='';
+  const get=id=>{
+    if(id in raw)return raw[id];
+    if(id in memo)return memo[id];
+    const c=calcs[id];if(!c)throw new Error('Unknown data: '+id);
+    return memo[id]=c.fn(...c.inputs.map(get));
+  };
+  const run=()=>subs.forEach(fn=>{try{fn();}catch(e){console.error(e);}});
+  window.dash={
+    calc:(id,o)=>{calcs[id]=o;},
+    loader:()=>{},
+    data:id=>{
+      if(state!=='ok')return {status:state,data:[],message:error};
+      try{return {status:'ok',data:get(id)};}catch(e){console.error(id,e);return {status:'error',data:[],message:String(e)};}
+    },
+    onData:fn=>{subs.push(fn);setTimeout(()=>{try{fn();}catch(e){console.error(e);}},0);},
+    setLink:id=>{try{history.replaceState(null,'','#'+id);}catch(e){}},
+    params:()=>({}),setParams:()=>{},resetParams:()=>{},refresh:()=>{},
+    get colors(){const cs=getComputedStyle(document.documentElement);return [1,2,3,4].map(i=>cs.getPropertyValue('--series-'+i).trim());}
+  };
+  // Read straight from the repository so new data shows as soon as the bot saves it; fall back to this site's copy.
+  const RAW='https://raw.githubusercontent.com/moureen-goubran/money-weather/main/';
+  const load=([id,url])=>d3.csv(RAW+url+'?v='+Date.now()).catch(()=>d3.csv(url+'?v='+Date.now())).then(rows=>{raw[id]=rows;});
+  Promise.all(Object.entries(FILES).map(load))
+    .then(()=>{state='ok';run();
+      const m=raw.monthly[raw.monthly.length-1];const el=document.getElementById('mw-asof');
+      if(el&&m)el.textContent=d3.utcFormat('%B %Y')(new Date(Date.UTC(+m.month.slice(0,4),+m.month.slice(5,7)-1,1)));})
+    .catch(e=>{state='error';error=String(e);run();});
+  let w=0;window.addEventListener('resize',()=>{if(Math.abs(innerWidth-w)>20){w=innerWidth;run();}});
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change',run);
+})();
+</script>
+</head>
+<body>
+<div id="dash-root">
+<style>
+#dash-root{--mw-ok:var(--color-ok);--mw-warn:var(--color-warn);--mw-bad:var(--color-bad)}
+.mw{display:flex;flex-direction:column;gap:var(--cds-gap-xl);font-family:var(--font-anthropic-sans);max-width:76rem;margin-inline:auto}
+.mw-head h1{font-family:var(--font-anthropic-serif);font-weight:400;font-size:var(--cds-font-size-title);margin:0;text-wrap:balance}
+.mw-head p{margin:var(--cds-gap-xs) 0 0;color:var(--color-fg-muted);font-size:var(--cds-font-size-body);max-width:62ch}
+.mw-legend{display:flex;flex-wrap:wrap;gap:var(--cds-gap-md);margin-top:var(--cds-gap-sm);font-size:var(--cds-font-size-caption);color:var(--color-fg-muted)}
+.mw-legend span{display:inline-flex;align-items:center;gap:var(--cds-gap-xs)}
+.mw-dot{width:.6rem;height:.6rem;border-radius:50%;display:inline-block;flex:none}
+.mw-dot.good{background:var(--mw-ok)}.mw-dot.watch{background:var(--mw-warn)}.mw-dot.alert{background:var(--mw-bad)}
+.mw-sec{display:flex;flex-direction:column;gap:var(--cds-gap-md)}
+.mw-sec>h2{font-size:var(--cds-font-size-heading);font-weight:var(--cds-font-weight-medium);margin:0}
+.mw-sec>.mw-lead{margin:0;color:var(--color-fg-muted);max-width:68ch}
+.mw-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,15rem),1fr));gap:var(--cds-gap-md)}
+.mw-tile{background:var(--color-panel);border:1px solid var(--color-border-line);border-radius:var(--cds-radius);padding:var(--cds-pad-md);display:flex;flex-direction:column;gap:var(--cds-gap-xs);border-top-width:4px;min-width:0}
+.mw-tile.good{border-top-color:var(--mw-ok)}.mw-tile.watch{border-top-color:var(--mw-warn)}.mw-tile.alert{border-top-color:var(--mw-bad)}
+.mw-tile .lbl{font-size:var(--cds-font-size-caption);color:var(--color-fg-muted);display:flex;justify-content:space-between;gap:var(--cds-gap-sm)}
+.mw-tile .val{font-family:var(--font-anthropic-serif);font-weight:400;font-size:var(--cds-font-size-title);font-variant-numeric:tabular-nums;line-height:1.1}
+.mw-pill{font-size:var(--cds-font-size-caption);font-weight:var(--cds-font-weight-medium);padding:0 var(--cds-pad-xs);border-radius:999px;white-space:nowrap;align-self:flex-start}
+.mw-pill.good{color:var(--mw-ok);background:color-mix(in srgb,var(--mw-ok) 14%,transparent)}
+.mw-pill.watch{color:var(--mw-warn);background:color-mix(in srgb,var(--mw-warn) 16%,transparent)}
+.mw-pill.alert{color:var(--mw-bad);background:color-mix(in srgb,var(--mw-bad) 14%,transparent)}
+.mw-tile .note{font-size:var(--cds-font-size-caption);color:var(--color-fg-muted);margin:0}
+.mw-tile .per{font-size:var(--cds-font-size-caption);color:var(--color-fg-muted)}
+.mw-spark{height:2.2rem}
+.mw-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,22rem),1fr));gap:var(--cds-gap-md)}
+.mw-card{background:var(--color-panel);border:1px solid var(--color-border-line);border-radius:var(--cds-radius);padding:var(--cds-pad-lg);display:flex;flex-direction:column;gap:var(--cds-gap-sm);min-width:0}
+.mw-card h3{margin:0;font-size:var(--cds-font-size-body);font-weight:var(--cds-font-weight-medium)}
+.mw-card .sub{margin:0;font-size:var(--cds-font-size-caption);color:var(--color-fg-muted)}
+.mw-chart{position:relative;min-height:15rem}
+.mw-chart.short{min-height:10rem}
+.mw-keys{display:flex;flex-wrap:wrap;gap:var(--cds-gap-md);font-size:var(--cds-font-size-caption);color:var(--color-fg-muted)}
+.mw-keys i{display:inline-block;width:.9rem;height:2px;vertical-align:middle;margin-right:var(--cds-gap-xs)}
+.mw-remember{border:1px dashed var(--color-border-line);border-radius:var(--cds-radius);padding:var(--cds-pad-md);font-size:var(--cds-font-size-caption);display:flex;flex-direction:column;gap:var(--cds-gap-xs)}
+.mw-remember b{font-size:var(--cds-font-size-caption);letter-spacing:.06em;text-transform:uppercase;color:var(--color-fg-muted)}
+.mw-remember ul{margin:0;padding-left:1.1rem;display:flex;flex-direction:column;gap:var(--cds-gap-xs)}
+.mw-tip{position:absolute;pointer-events:none;background:var(--cds-surface-popover);border:1px solid var(--cds-border);border-radius:var(--cds-radius);box-shadow:var(--cds-shadow-popover);padding:var(--cds-pad-xs) var(--cds-pad-sm);font-size:var(--cds-font-size-caption);white-space:nowrap;z-index:2;font-variant-numeric:tabular-nums}
+.mw-tip .d{color:var(--cds-text-secondary)}
+.mw-tablewrap{overflow-x:auto}
+.mw-table{width:100%;border-collapse:collapse;font-size:var(--cds-font-size-caption);font-variant-numeric:tabular-nums}
+.mw-table th,.mw-table td{text-align:right;padding:var(--cds-pad-xs) var(--cds-pad-sm);border-bottom:1px solid var(--color-border-line);white-space:nowrap}
+.mw-table th:first-child,.mw-table td:first-child{text-align:left}
+.mw-table th{color:var(--color-fg-muted);font-weight:var(--cds-font-weight-medium)}
+.mw-up{color:var(--mw-ok)}.mw-down{color:var(--mw-bad)}
+.mw-rules td,.mw-rules th{text-align:left;white-space:normal}
+.mw-flag{font-weight:var(--cds-font-weight-medium)}
+.mw .mw-num{font-weight:var(--cds-font-weight-medium)}
+[data-dash-source-state=empty]{color:transparent}
+.mw-brief{background:var(--color-panel);border:1px solid var(--color-border-line);border-radius:var(--cds-radius);padding:var(--cds-pad-lg);display:flex;flex-direction:column;gap:var(--cds-gap-sm)}
+.mw-brief h2{margin:0;font-size:var(--cds-font-size-heading);font-weight:var(--cds-font-weight-medium)}
+.mw-brief ul{margin:0;padding-left:1.1rem;display:flex;flex-direction:column;gap:var(--cds-gap-sm);max-width:72ch}
+.mw-brief li.alert::marker{color:var(--mw-bad)}
+.mw-brief .so{margin:0;padding-top:var(--cds-pad-sm);border-top:1px solid var(--color-border-line);max-width:72ch}
+.mw-what{margin:0;font-size:var(--cds-font-size-caption);line-height:1.5;padding-top:var(--cds-pad-sm);border-top:1px solid var(--color-border-line)}
+.mw-what>b{font-weight:var(--cds-font-weight-medium)}
+.mw .mw-red{color:var(--mw-bad);font-weight:var(--cds-font-weight-medium)}
+.mw-tile{cursor:pointer;text-align:left;font:inherit;color:inherit}
+.mw-tile:hover{border-color:var(--cds-chart-axis)}
+.mw-tile:focus-visible{outline:2px solid var(--cds-chart-axis);outline-offset:2px}
+.mw-tile .go{font-size:var(--cds-font-size-caption);color:var(--color-fg-muted);text-decoration:underline;margin-top:auto}
+.mw-math{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,22rem),1fr));gap:var(--cds-gap-md)}
+.mw-mathcard{background:var(--color-panel);border:1px solid var(--color-border-line);border-radius:var(--cds-radius);padding:var(--cds-pad-md);display:flex;flex-direction:column;gap:var(--cds-gap-xs);font-size:var(--cds-font-size-caption);scroll-margin-top:var(--cds-pad-xl)}
+.mw-mathcard h3{margin:0;font-size:var(--cds-font-size-body);font-weight:var(--cds-font-weight-medium);display:flex;gap:var(--cds-gap-sm);align-items:center}
+.mw-mathcard dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:var(--cds-gap-xs) var(--cds-gap-md)}
+.mw-mathcard dt{color:var(--color-fg-muted)}.mw-mathcard dd{margin:0}
+.mw-mathcard .back{color:var(--color-fg-muted);text-decoration:underline;cursor:pointer;background:none;border:0;padding:0;font:inherit;align-self:flex-start}
+.mw-mathcard.flash{outline:2px solid var(--cds-chart-axis)}
+[data-dash-source-state=refreshing]{opacity:.5;transition:opacity var(--cds-dur-slow)}
+.mw-fail{display:flex;align-items:center;justify-content:center;gap:var(--cds-gap-xs);color:var(--color-fg-muted);font-size:var(--cds-font-size-caption);min-height:inherit;height:100%}
+.mw-fail::before{content:"";width:.375rem;height:.375rem;border-radius:50%;background:var(--color-bad)}
+</style>
+
+<div class="mw">
+  <header class="mw-head" id="top">
+    <h1>Money Weather Report</h1>
+    <p id="takeaway"><span data-source="summary" data-field="alert" class="mw-num">—</span> red, <span data-source="summary" data-field="watch" class="mw-num">—</span> amber and <span data-source="summary" data-field="good" class="mw-num">—</span> green readings. <span data-source="summary" data-field="headline">—</span></p>
+    <div class="mw-legend">
+      <span><i class="mw-dot good"></i>Green: normal range</span>
+      <span><i class="mw-dot watch"></i>Amber: keep an eye on it</span>
+      <span><i class="mw-dot alert"></i>Red: outside the comfort zone</span>
+      <span>Click any card to see its math.</span>
+    </div>
+  </header>
+
+  <section class="mw-brief" id="brief">
+    <h2>In plain English</h2>
+    <ul id="brief-list" data-source="brief"></ul>
+    <p class="so" id="brief-so"><b>So what, for a set-and-forget investor:</b> <span data-source="briefso" data-field="text">—</span></p>
+  </section>
+
+  <section class="mw-sec" id="readings">
+    <h2>Today's readings</h2>
+    <p class="mw-lead">Each card shows the latest reading, its color and a one-line reminder. The little line is the last five years. Click a card to see exactly how it is calculated.</p>
+    <div class="mw-tiles" id="tiles" data-source="status ind"></div>
+  </section>
+
+  <section class="mw-sec" id="money">
+    <h2>Money in, prices up</h2>
+    <p class="mw-lead">Does more money in the system show up later as higher prices? This is the 2020 story, and it is the first thing to check when money growth picks up.</p>
+    <div class="mw-grid">
+      <div class="mw-card">
+        <h3>Money supply growth vs. inflation</h3>
+        <p class="sub">Change from a year earlier, % · monthly</p>
+        <div class="mw-keys" id="k-money"></div>
+        <div class="mw-chart" id="c-money" data-source="ind"></div>
+        <p class="mw-what"><b>What this means:</b> <span data-source="notes" data-field="text" data-where="id=money">—</span> <span class="mw-red" data-source="notes" data-field="alert" data-where="id=money"></span></p>
+      </div>
+      <div class="mw-card">
+        <h3>How far ahead does money lead prices?</h3>
+        <p class="sub">How closely money growth matches inflation N months later (1 = perfectly, 0 = not at all), 2015 onward</p>
+        <div class="mw-chart short" id="c-lag" data-source="m2lead"></div>
+
+        <p class="mw-what"><b>What this means:</b> <span data-source="notes" data-field="text" data-where="id=lag">—</span> <span class="mw-red" data-source="notes" data-field="alert" data-where="id=lag"></span></p>
+      </div>
+    </div>
+    <div class="mw-card">
+      <h3>Paychecks vs. prices</h3>
+      <p class="sub">Change from a year earlier, % · average hourly pay (private jobs) vs. inflation</p>
+      <div class="mw-keys" id="k-wage"></div>
+      <div class="mw-chart" id="c-wage" data-source="ind"></div>
+        <p class="mw-what"><b>What this means:</b> <span data-source="notes" data-field="text" data-where="id=wage">—</span> <span class="mw-red" data-source="notes" data-field="alert" data-where="id=wage"></span></p>
+    </div>
+    <div class="mw-remember">
+      <b>Remember</b>
+      <ul>
+        <li>M2 is checking, savings and cash: money that is easy to spend. Most new money is created when banks lend, not printed. Unused credit card limits are not money; the moment you swipe, the store gets a new deposit, and that deposit is.</li>
+        <li>Inflation only hurts when paychecks fall behind it. That is why the inflation card also checks pay and jobs.</li>
+        <li>In 2020 money jumped while factories and shipping were shut. More money chasing fewer goods meant higher prices about a year and a half later.</li>
+        <li>This is a pattern, not a law. Use it as an early warning, then look for confirmation in the inflation numbers.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="mw-sec" id="rates">
+    <h2>The brake pedal and the warning light</h2>
+    <p class="mw-lead">The Fed sets the short-term rate. Markets set the 10-year. When short rates sit above long rates, the curve is "inverted", a classic recession warning.</p>
+    <div class="mw-grid">
+      <div class="mw-card">
+        <h3>Interest rates</h3>
+        <p class="sub">% per year · monthly average</p>
+        <div class="mw-keys" id="k-rates"></div>
+        <div class="mw-chart" id="c-rates" data-source="ind"></div>
+        <p class="mw-what"><b>What this means:</b> <span data-source="notes" data-field="text" data-where="id=rates">—</span> <span class="mw-red" data-source="notes" data-field="alert" data-where="id=rates"></span></p>
+      </div>
+      <div class="mw-card">
+        <h3>Yield curve: 10-year minus 2-year</h3>
+        <p class="sub">Percentage points · red bars are inversions</p>
+        <div class="mw-chart" id="c-curve" data-source="ind"></div>
+
+        <p class="mw-what"><b>What this means:</b> <span data-source="notes" data-field="text" data-where="id=curve">—</span> <span class="mw-red" data-source="notes" data-field="alert" data-where="id=curve"></span></p>
+      </div>
+    </div>
+    <div class="mw-remember">
+      <b>Remember</b>
+      <ul>
+        <li>The 10-year rate after inflation is what a safe 10-year government bond pays you beyond keeping up with prices. It is the no-risk reward everything else has to beat.</li>
+        <li>Real rate = interest rate minus inflation. Above zero, the Fed is pressing the brake. Below zero, borrowing is basically free money.</li>
+        <li>Mortgages follow the 10-year more than the Fed's rate, which is why mortgage rates can rise while the Fed cuts.</li>
+        <li>The curve inverted in 2022 and was widely called a recession signal. Stocks rose strongly in 2023 and 2024. That is your "obvious crash" test.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="mw-sec" id="gold">
+    <h2>Gold: insurance, not an engine</h2>
+    <p class="mw-lead">Gold used to move opposite to inflation-adjusted interest rates. Since 2022 that link has broken, and gold has climbed even with high rates.</p>
+    <div class="mw-grid">
+      <div class="mw-card">
+        <h3>Gold price</h3>
+        <p class="sub">US dollars per ounce · monthly average</p>
+        <div class="mw-chart" id="c-gold" data-source="ind"></div>
+        <p class="mw-what"><b>What this means:</b> <span data-source="notes" data-field="text" data-where="id=gold">—</span> <span class="mw-red" data-source="notes" data-field="alert" data-where="id=gold"></span></p>
+      </div>
+      <div class="mw-card">
+        <h3>10-year rate after inflation</h3>
+        <p class="sub">% per year, inflation-protected Treasury · monthly</p>
+        <div class="mw-chart" id="c-real" data-source="ind"></div>
+        <p class="mw-what"><b>What this means:</b> <span data-source="notes" data-field="text" data-where="id=real">—</span> <span class="mw-red" data-source="notes" data-field="alert" data-where="id=real"></span></p>
+      </div>
+    </div>
+    <div class="mw-card">
+      <h3>Did gold follow real rates?</h3>
+      <p class="sub">-1 means they move in opposite directions every time; +1 means together; 0 means no link</p>
+      <div class="mw-tablewrap">
+        <table class="mw-table" data-source="goldera" data-row-key="era">
+          <thead><tr><th data-field="era">Period</th><th data-field="corr">Gold vs. real rate</th><th data-field="reading">What it means</th></tr></thead>
+          <tbody id="t-goldera"></tbody>
+        </table>
+      </div>
+        <p class="mw-what"><b>What this means:</b> <span data-source="notes" data-field="text" data-where="id=goldera">—</span> <span class="mw-red" data-source="notes" data-field="alert" data-where="id=goldera"></span></p>
+    </div>
+    <div class="mw-remember">
+      <b>Remember</b>
+      <ul>
+        <li>Gold pays nothing. You give up interest to hold it, so it usually does worse when real rates are high.</li>
+        <li>When it rises anyway, the driver is fear and central banks buying gold, not rates.</li>
+        <li>History: the US made people turn in gold in 1933 and cut the last dollar-gold link in 1971. Since then, the dollar's value rests on trust and on taxes being payable only in dollars.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="mw-sec" id="spending">
+    <h2>What people are buying</h2>
+    <p class="mw-lead">Your "silly purchases" question. Store sales grew faster than inflation means people bought more, not just paid more.</p>
+    <div class="mw-card">
+      <h3>Spending by type of store, last 12 months</h3>
+      <p class="sub">Sales change from a year earlier, then the same minus inflation · latest month <span data-source="retailmonth" data-field="month">—</span></p>
+      <div class="mw-tablewrap">
+        <table class="mw-table" data-source="cats" data-row-key="category">
+          <thead><tr><th data-field="category">Store type</th><th data-field="yoy">Sales change</th><th data-field="real">After inflation</th><th data-field="vs2019">vs. 2019</th><th data-field="flag">Flag</th></tr></thead>
+          <tbody id="t-cats"></tbody>
+        </table>
+      </div>
+        <p class="mw-what"><b>What this means:</b> <span data-source="notes" data-field="text" data-where="id=cats">—</span> <span class="mw-red" data-source="notes" data-field="alert" data-where="id=cats"></span></p>
+    </div>
+    <div class="mw-grid">
+      <div class="mw-card">
+        <h3>Treat ratio: restaurants ÷ groceries</h3>
+        <p class="sub">Dollars spent eating out for every $1 at the grocery store · monthly</p>
+        <div class="mw-chart" id="c-treat" data-source="treat"></div>
+        <p class="mw-what"><b>What this means:</b> <span data-source="notes" data-field="text" data-where="id=treat">—</span> <span class="mw-red" data-source="notes" data-field="alert" data-where="id=treat"></span></p>
+      </div>
+      <div class="mw-card">
+        <h3>How people feel</h3>
+        <p class="sub">University of Michigan consumer sentiment index · dashed line is the 2017–2019 average</p>
+        <div class="mw-chart" id="c-mood" data-source="ind"></div>
+        <p class="mw-what"><b>What this means:</b> <span data-source="notes" data-field="text" data-where="id=mood">—</span> <span class="mw-red" data-source="notes" data-field="alert" data-where="id=mood"></span></p>
+      </div>
+    </div>
+    <div class="mw-remember">
+      <b>Remember</b>
+      <ul>
+        <li>Lipstick effect: in tough times people cut big purchases but keep small treats. Watch restaurants, beauty and clothing against groceries.</li>
+        <li>Low sentiment with strong spending is a mismatch. Either moods recover, or spending eventually follows moods down.</li>
+        <li>A falling saving rate plus rising card debt means spending is being stretched.</li>
+        <li>The health and beauty store figures drop by about 8% in one month in January 2026, likely a data revision, so treat that row with caution.</li>
+        <li>Scanning for brand-new trends (a product suddenly everywhere) needs search and news data. That is Sprint 3, the keyword tracker.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="mw-sec" id="profits">
+    <h2>Is profit real?</h2>
+    <p class="mw-lead">Profit is an accounting number; cash flow is money that actually came in. If profits climb much faster than cash, something on paper is doing the work.</p>
+    <div class="mw-card">
+      <h3>US company profits per $1 of cash flow</h3>
+      <p class="sub">All US corporations, after tax · quarterly · dashed line is the 2015–2024 average</p>
+      <div class="mw-chart" id="c-profit" data-source="profit_ratio"></div>
+        <p class="mw-what"><b>What this means:</b> <span data-source="notes" data-field="text" data-where="id=profit">—</span> <span class="mw-red" data-source="notes" data-field="alert" data-where="id=profit"></span></p>
+    </div>
+    <div class="mw-remember">
+      <b>Remember</b>
+      <ul>
+        <li>Cash flow is always bigger because it adds back depreciation (the paper cost of equipment wearing out). The ratio's trend matters, not its level.</li>
+        <li>The 2017 spike is the tax-law change, not fraud: one-time tax charges cut cash in that quarter.</li>
+        <li>This is the whole economy. For one company, we'll compare its own profits and cash flow from its filings in Sprint 4 (circular-money map).</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="mw-sec" id="math">
+    <h2>Show the math</h2>
+    <p class="mw-lead">The raw numbers come straight from government agencies (Labor Department, Federal Reserve, Census Bureau, Commerce Department), and those are widely trusted. Everything on top of them, the percentages, ratios and colors, is my math, laid out here so you can check it. You can also open Sources from the toolbar to see and download the raw rows.</p>
+    <div class="mw-math" id="mathcards" data-source="status"></div>
+    <p class="sub">Sources: FRED (St. Louis Fed) for prices, pay, money, rates, jobs, spending, savings, card debt, sentiment and company profits; Bureau of Labor Statistics for the latest pay; BEA for GDP; LBMA gold via the open gold-prices dataset. A government shutdown meant no inflation or jobs report for October 2025, so that month is filled with the average of the months around it.</p>
+  </section>
+</div>
+
+<script>
+(function(){
+const N=v=>(v===''||v==null||isNaN(+v))?null:+v;
+const r1=v=>v==null?null:Math.round(v*10)/10;
+const r2=v=>v==null?null:Math.round(v*100)/100;
+
+dash.calc('ind',{inputs:['monthly'],title:'Monthly indicators',description:'Year-over-year changes, inflation-adjusted Fed rate, yield-curve gap and unemployment trend, worked out from the monthly series.',fn:(monthly)=>{
+  const n=v=>(v===''||v==null||isNaN(+v))?null:+v;
+  const r=monthly.map(d=>({month:d.month,cpi:n(d.cpi),core:n(d.core_cpi),m2:n(d.m2_bn),ff:n(d.fed_funds),t10:n(d.treasury_10y),t2:n(d.treasury_2y),real10:n(d.real_10y),gold:n(d.gold_usd),un:n(d.unemployment),save:n(d.saving_rate),sent:n(d.sentiment),card:n(d.card_debt_bn),pay:n(d.hourly_pay)}));
+  ['cpi','core','un'].forEach(k=>r.forEach((d,i)=>{if(d[k]==null&&i>0&&i<r.length-1&&r[i-1][k]!=null&&r[i+1][k]!=null)d[k]=(r[i-1][k]+r[i+1][k])/2;}));
+  const yoy=(i,k)=>i>=12&&r[i][k]!=null&&r[i-12][k]!=null?(r[i][k]/r[i-12][k]-1)*100:null;
+  const rd=v=>v==null?null:Math.round(v*100)/100;
+  const un3=r.map((d,i)=>i>=2&&[0,1,2].every(j=>r[i-j].un!=null)?(r[i].un+r[i-1].un+r[i-2].un)/3:null);
+  return r.map((d,i)=>{
+    const core=yoy(i,'core');
+    const win=un3.slice(Math.max(0,i-12),i+1).filter(v=>v!=null);
+    return {month:d.month,cpi_yoy:rd(yoy(i,'cpi')),core_yoy:rd(core),
+      core_3m:i>=3&&d.core!=null&&r[i-3].core!=null?rd((Math.pow(d.core/r[i-3].core,4)-1)*100):null,
+      m2_yoy:rd(yoy(i,'m2')),fed_funds:d.ff,t10:d.t10,t2:d.t2,curve:d.t10!=null&&d.t2!=null?rd(d.t10-d.t2):null,
+      real_fed:d.ff!=null&&core!=null?rd(d.ff-core):null,real10:d.real10,gold:d.gold,gold_yoy:rd(yoy(i,'gold')),
+      unemployment:d.un,un_trend:un3[i]!=null&&win.length>=12?rd(un3[i]-Math.min(...win)):null,
+      saving_rate:d.save,sentiment:d.sent,card_yoy:rd(yoy(i,'card')),
+      pay_yoy:rd(yoy(i,'pay')),real_pay:yoy(i,'pay')!=null&&yoy(i,'cpi')!=null?rd(yoy(i,'pay')-yoy(i,'cpi')):null,
+      misery:d.un!=null&&yoy(i,'cpi')!=null?rd(d.un+yoy(i,'cpi')):null,
+      expected_inflation:d.t10!=null&&d.real10!=null?rd(d.t10-d.real10):null};
+  }).filter(d=>d.month>='2015-01');
+}});
+
+dash.calc('profit_ratio',{inputs:['profits'],title:'Profit per $1 of cash flow',description:'After-tax corporate profits divided by corporate net cash flow, each quarter, with the 2015–2024 average.',fn:(profits)=>{
+  const rows=profits.map(d=>({quarter:d.quarter,ratio:Math.round(+d.profits_bn/+d.cash_flow_bn*1000)/1000}));
+  const base=rows.filter(d=>d.quarter<'2025');
+  const avg=base.reduce((s,d)=>s+d.ratio,0)/base.length;
+  const sd=Math.sqrt(base.reduce((s,d)=>s+(d.ratio-avg)**2,0)/(base.length-1));
+  return rows.map(d=>({...d,avg:Math.round(avg*1000)/1000,sd:Math.round(sd*1000)/1000}));
+}});
+
+dash.calc('status',{inputs:['ind','profit_ratio','gdp'],title:'Readings and their colors',description:'The latest value of each reading, the color its rule gives it, and the worked math.',fn:(ind,profit_ratio,gdp)=>{
+  const last=k=>{for(let i=ind.length-1;i>=0;i--)if(ind[i][k]!=null)return {v:ind[i][k],m:ind[i].month,i};return {v:null,m:'',i:-1};};
+  const ago=(k,i,n)=>i-n>=0?ind[i-n][k]:null;
+  const f1=v=>v==null?'n/a':(Math.round(v*10)/10).toFixed(1);
+  const one=v=>v==null?null:Math.round(v*10)/10;
+  const out=[];
+  const add=o=>out.push({key:o.key,label:o.label,value:o.unit==='$'?Math.round(o.v):one(o.v),unit:o.unit,period:o.m,status:o.status,word:o.word,note:o.note,rule:o.rule,why:o.why,math:o.math,example:o.example,source:o.source,spark:o.spark||o.key});
+  // Inflation pain: inflation judged with paychecks and jobs
+  const c=last('cpi_yoy'),rp=last('real_pay'),ut=last('un_trend');
+  const hurt=(rp.v!=null&&rp.v<0)||(ut.v!=null&&ut.v>=0.3);
+  const cs=c.v>5||(c.v>3.5&&hurt)?'alert':(c.v>2.5||(rp.v!=null&&rp.v<0))?'watch':'good';
+  add({key:'cpi',label:'Inflation',v:c.v,m:c.m,unit:'%',status:cs,spark:'cpi_yoy',
+    word:cs==='alert'?(rp.v<0?'Beating paychecks':'Hurting jobs'):cs==='watch'?'Above target':'Near target',
+    note:'Prices vs. a year ago, judged against pay and jobs.',
+    rule:'Red if above 5%, or above 3.5% while pay falls behind prices or unemployment is rising. Amber if above 2.5% or pay is behind. Otherwise green.',
+    why:'Inflation only hurts when paychecks fall behind or jobs disappear.',
+    math:'Inflation = (price index this month ÷ price index 12 months ago − 1) × 100. Then two checks: is pay growing slower than prices, and is unemployment rising?',
+    example:`Price index ${ind[c.i].month}: up ${f1(c.v)}% on a year earlier. Pay vs. prices: ${f1(rp.v)} points. Unemployment change: +${f1(ut.v)} points. → ${cs==='alert'?'red':cs==='watch'?'amber':'green'}.`,
+    source:'Consumer Price Index (BLS), hourly pay (BLS), unemployment (BLS)'});
+  add({key:'realpay',label:'Paycheck vs. prices',v:rp.v,m:rp.m,unit:'pts',spark:'real_pay',status:rp.v<0?'alert':rp.v<1?'watch':'good',word:rp.v<0?'Losing ground':rp.v<1?'Barely ahead':'Getting ahead',
+    note:'Pay growth minus inflation. Below zero, a paycheck buys less than a year ago.',rule:'1 point or more / 0 to 1 / below 0',why:'This is "can people still afford things" in one number.',
+    math:'Pay growth − inflation, both as % change from a year earlier.',
+    example:`Pay up ${f1(ago('pay_yoy',rp.i,0))}% − prices up ${f1(ind[rp.i].cpi_yoy)}% = ${f1(rp.v)} points (${rp.m}).`,source:'Average hourly earnings and CPI (BLS)'});
+  const k3=last('core_3m');
+  add({key:'core3m',label:'Inflation momentum',v:k3.v,m:k3.m,unit:'%',spark:'core_3m',status:k3.v<=2.5?'good':k3.v<=3.5?'watch':'alert',word:k3.v<=2.5?'Cooling':k3.v<=3.5?'Warming':'Heating up',
+    note:'Last 3 months of core prices (no food or gas), as a yearly pace.',rule:'Up to 2.5% / up to 3.5% / above 3.5%',why:'Shows where inflation is heading before the yearly number does.',
+    math:'((core index now ÷ core index 3 months ago) ^ 4 − 1) × 100. The ^4 turns 3 months into a yearly pace.',
+    example:`Core index rose to a ${f1(k3.v)}% yearly pace over the 3 months to ${k3.m}.`,source:'Core CPI (BLS)'});
+  const mi=last('misery');
+  add({key:'misery',label:'Misery index',v:mi.v,m:mi.m,unit:'%',spark:'misery',status:mi.v>10?'alert':mi.v>8?'watch':'good',word:mi.v>10?'Painful':mi.v>8?'Uncomfortable':'Bearable',
+    note:'Inflation plus unemployment. One number for how much the economy hurts households.',rule:'Up to 8 / 8–10 / above 10',why:'High prices with plenty of jobs hurts less than high prices with job losses.',
+    math:'Inflation % + unemployment %. It peaked near 12 in mid-2022 in this chart.',
+    example:`${f1(ind[mi.i].cpi_yoy)}% inflation + ${f1(ind[mi.i].unemployment)}% unemployment = ${f1(mi.v)} (${mi.m}).`,source:'CPI and unemployment rate (BLS)'});
+  const m2=last('m2_yoy');
+  add({key:'m2',label:'Money supply growth',v:m2.v,m:m2.m,unit:'%',spark:'m2_yoy',status:m2.v<0||m2.v>8?'alert':m2.v>6?'watch':'good',word:m2.v<0?'Shrinking':m2.v>8?'Flooding':m2.v>6?'Fast':'Normal',
+    note:'Spendable money vs. a year ago. Tends to show up in prices about 18 months later.',rule:'0–6% / 6–8% / below 0 or above 8%',why:'A surge tends to show up later as higher prices.',
+    math:'(M2 now ÷ M2 12 months ago − 1) × 100.',example:`M2 grew ${f1(m2.v)}% in the year to ${m2.m}; a year earlier it was growing ${f1(ago('m2_yoy',m2.i,12))}%.`,source:'M2 money stock (Federal Reserve)'});
+  const rf=last('real_fed');
+  add({key:'realfed',label:'Fed brake',v:rf.v,m:rf.m,unit:'pts',spark:'real_fed',status:rf.v<0?'alert':rf.v>2.5?'watch':'good',word:rf.v<0?'Gas pedal':rf.v>2.5?'Hard brake':rf.v>0.5?'Light brake':'Neutral',
+    note:'Fed rate minus core inflation. Above zero slows the economy.',rule:'0 to 2.5 points / above 2.5 / below 0',why:'Negative means cheap money and future inflation; very high risks a slowdown.',
+    math:'Fed funds rate − core inflation (% from a year earlier).',example:`${f1(ind[rf.i].fed_funds)}% − ${f1(ind[rf.i].core_yoy)}% = ${f1(rf.v)} points (${rf.m}).`,source:'Fed funds rate (Federal Reserve), core CPI (BLS)'});
+  const cv=last('curve');
+  add({key:'curve',label:'Yield curve',v:cv.v,m:cv.m,unit:'pts',spark:'curve',status:cv.v<0?'alert':cv.v<0.5?'watch':'good',word:cv.v<0?'Inverted':cv.v<0.5?'Flat':'Normal',
+    note:'10-year minus 2-year rate. Below zero is the classic recession warning.',rule:'Above 0.5 / 0 to 0.5 / below 0',why:'A warning light, not a sell signal; timing is unreliable.',
+    math:'10-year Treasury rate − 2-year Treasury rate.',example:`${f1(ind[cv.i].t10)}% − ${f1(ind[cv.i].t2)}% = ${(Math.round(cv.v*100)/100).toFixed(2)} points (${cv.m}).`,source:'Treasury rates (Federal Reserve)'});
+  const gd=last('gold_yoy');
+  add({key:'gold',label:'Gold price change',v:gd.v,m:gd.m,unit:'%',spark:'gold',status:gd.v>25||gd.v<-15?'alert':gd.v>12?'watch':'good',word:gd.v>25?'Fear is high':gd.v>12?'Rising fast':gd.v<-15?'Falling hard':'Calm',
+    note:'Price change vs. a year ago. Big jumps mean people are buying insurance.',rule:'Up to 12% / 12–25% / above 25% or below −15%',why:'A fear gauge: how nervous big money is.',
+    math:'(gold price now ÷ gold price 12 months ago − 1) × 100.',example:`$${Math.round(ind[gd.i].gold)} now vs. $${Math.round(ago('gold',gd.i,12))} a year earlier = ${f1(gd.v)}% (${gd.m}).`,source:'LBMA gold price, monthly average'});
+  const ut2=last('un_trend');
+  add({key:'jobs',label:'Unemployment trend',v:ut2.v,m:ut2.m,unit:'pts',spark:'unemployment',status:ut2.v<=0.2?'good':ut2.v<=0.4?'watch':'alert',word:ut2.v>=0.5?'Recession signal':ut2.v>0.2?'Creeping up':'Steady',
+    note:'How far the jobless rate has risen above its low of the past year. 0.5 has marked past recessions.',rule:'Up to 0.2 / up to 0.4 / above 0.4',why:'Job losses are what turn a slowdown into a recession.',
+    math:'3-month average unemployment now − lowest 3-month average in the past 12 months (the "Sahm rule").',example:`Unemployment ${f1(ind[ut2.i].unemployment)}%; rise above the past year's low: ${f1(ut2.v)} points (${ut2.m}).`,source:'Unemployment rate (BLS)'});
+  const sv=last('saving_rate');
+  add({key:'saving',label:'Saving rate',v:sv.v,m:sv.m,unit:'%',spark:'saving_rate',status:sv.v<4?'alert':sv.v<5.5?'watch':'good',word:sv.v<4?'Stretched':sv.v<5.5?'Thin':'Healthy',
+    note:'Share of after-tax income people save.',rule:'5.5% or more / 4–5.5% / below 4%',why:'A thin cushion means less room to keep spending if jobs weaken.',
+    math:'Reported directly by the Commerce Department: personal saving ÷ after-tax income.',example:`${f1(sv.v)}% of income saved in ${sv.m}.`,source:'Personal saving rate (BEA)'});
+  const cd=last('card_yoy');
+  add({key:'card',label:'Credit card debt growth',v:cd.v,m:cd.m,unit:'%',spark:'card_yoy',status:cd.v<=5?'good':cd.v<=8?'watch':'alert',word:cd.v>8?'Borrowing fast':cd.v>5?'Rising':'Steady',
+    note:'Revolving credit vs. a year ago.',rule:'Up to 5% / 5–8% / above 8%',why:'Fast growth with low savings means spending on credit.',
+    math:'(card balances now ÷ 12 months ago − 1) × 100.',example:`Balances up ${f1(cd.v)}% in the year to ${cd.m}.`,source:'Revolving consumer credit (Federal Reserve)'});
+  const se=last('sentiment');
+  add({key:'mood',label:'Consumer mood',v:se.v,m:se.m,unit:'index',spark:'sentiment',status:se.v<55?'alert':se.v<70?'watch':'good',word:se.v<55?'Gloomy':se.v<70?'Uneasy':'Confident',
+    note:'University of Michigan survey. Before 2020 it sat around 95–100.',rule:'70 or more / 55–70 / below 55',why:'Mood drives spending, with a lag.',
+    math:'Survey score reported by the University of Michigan (1966 = 100).',example:`${f1(se.v)} in ${se.m}.`,source:'University of Michigan, via FRED'});
+  const pr=profit_ratio[profit_ratio.length-1];
+  const ps=pr.ratio>pr.avg+pr.sd?'alert':pr.ratio>pr.avg+pr.sd/2?'watch':'good';
+  out.push({key:'profit',label:'Profit vs. cash',value:Math.round(pr.ratio*100)/100,unit:'×',period:pr.quarter,status:ps,word:ps==='alert'?'Profits outrunning cash':ps==='watch'?'A bit high':'Normal',note:'US company profits per $1 of cash coming in.',rule:'Within half a typical swing of average / half to one swing above / more than one above',why:'If profits rise without cash, accounting is doing the work.',
+    math:'After-tax profits ÷ net cash flow, all US companies. "Typical swing" is the standard deviation, 2015–2024.',example:`${pr.ratio.toFixed(2)} in ${pr.quarter} vs. average ${pr.avg.toFixed(2)} (typical swing ${pr.sd.toFixed(2)}).`,source:'Corporate profits and net cash flow (BEA)',spark:'profit'});
+  const g=gdp[gdp.length-1];const gv=+g.real_gdp_growth;
+  out.push({key:'gdp',label:'GDP growth',value:gv,unit:'%',period:g.quarter,status:gv<0?'alert':gv<1.5?'watch':'good',word:gv<0?'Shrinking':gv<1.5?'Slow':'Growing',note:'Value of new goods and services made, after inflation, at a yearly pace.',rule:'1.5% or more / 0–1.5% / below 0',why:'Two negative quarters in a row is the common shorthand for recession.',
+    math:'Reported directly by the Commerce Department: real GDP growth at an annual rate.',example:`${gv.toFixed(1)}% in ${g.quarter}.`,source:'Real GDP (BEA)',spark:''});
+  return out;
+}});
+
+dash.calc('summary',{inputs:['status'],title:'Color count',description:'How many readings are green, amber and red, plus a one-line headline from the red and amber readings.',fn:(status)=>{
+  const c=k=>status.filter(d=>d.status===k).length;
+  const red=status.filter(d=>d.status==='alert').map(d=>d.label.toLowerCase());
+  const amber=status.filter(d=>d.status==='watch').map(d=>d.label.toLowerCase());
+  const list=a=>a.length<=1?a.join(''):a.slice(0,-1).join(', ')+' and '+a[a.length-1];
+  return [{alert:c('alert'),watch:c('watch'),good:c('good'),headline:(red.length?'Red: '+list(red)+'. ':'')+(amber.length?'Watch: '+list(amber)+'.':'Nothing to watch.')}];
+}});
+
+dash.calc('m2lead',{inputs:['ind'],title:'Money-to-prices lead',description:'Correlation between money supply growth and inflation a given number of months later.',fn:(ind)=>{
+  const out=[];
+  for(let lag=0;lag<=30;lag+=3){
+    const p=[];for(let i=lag;i<ind.length;i++){const a=ind[i-lag].m2_yoy,b=ind[i].cpi_yoy;if(a!=null&&b!=null)p.push([a,b]);}
+    const mx=p.reduce((s,d)=>s+d[0],0)/p.length,my=p.reduce((s,d)=>s+d[1],0)/p.length;
+    let sxy=0,sx=0,sy=0;p.forEach(([x,y])=>{sxy+=(x-mx)*(y-my);sx+=(x-mx)**2;sy+=(y-my)**2;});
+    out.push({lag,corr:Math.round(sxy/Math.sqrt(sx*sy)*100)/100});
+  }
+  return out;
+}});
+dash.calc('lagbest',{inputs:['m2lead'],title:'Strongest lead',description:'The number of months at which money growth best matches later inflation.',fn:(m2lead)=>[m2lead.reduce((a,b)=>b.corr>a.corr?b:a)]});
+
+dash.calc('curvestats',{inputs:['ind'],title:'Months inverted',description:'Number of months since 2015 when the 10-year rate was below the 2-year rate.',fn:(ind)=>[{inverted_months:ind.filter(d=>d.curve!=null&&d.curve<0).length}]});
+
+dash.calc('goldera',{inputs:['ind'],title:'Gold vs. real rates by period',description:'Correlation between the gold price and the inflation-adjusted 10-year rate, before and after 2022.',fn:(ind)=>{
+  const corr=p=>{const mx=p.reduce((s,d)=>s+d[0],0)/p.length,my=p.reduce((s,d)=>s+d[1],0)/p.length;let a=0,b=0,c=0;p.forEach(([x,y])=>{a+=(x-mx)*(y-my);b+=(x-mx)**2;c+=(y-my)**2;});return Math.round(a/Math.sqrt(b*c)*100)/100;};
+  const pick=(f,t)=>ind.filter(d=>d.month>=f&&d.month<=t&&d.gold!=null&&d.real10!=null).map(d=>[d.gold,d.real10]);
+  const read=v=>v<-0.6?'Strong opposite link: rates up, gold down':v<-0.2?'Weak opposite link':v<0.2?'No real link':'Moving together: rates are not driving gold';
+  const e=[['2015–2021','2015-01','2021-12'],['2022 onward','2022-01','2099-12']].map(([era,f,t])=>{const c=corr(pick(f,t));return {era,corr:c,reading:read(c)};});
+  return e;
+}});
+
+dash.calc('retailmonth',{inputs:['retail'],title:'Latest spending month',description:'The most recent month in the store sales data.',fn:(retail)=>[{month:retail[retail.length-1].month}]});
+
+dash.calc('cats',{inputs:['retail','ind'],title:'Spending by store type',description:'Each store type’s sales change from a year earlier, the same minus inflation, and the change from the 2019 average.',fn:(retail,ind)=>{
+  const names={total:'All stores',restaurants_bars:'Restaurants and bars',online:'Online',clothing:'Clothing',health_beauty:'Health and beauty',groceries:'Groceries'};
+  const L=retail[retail.length-1],P=retail[retail.length-13];
+  const inf=(ind.find(d=>d.month===L.month)||{}).cpi_yoy;
+  const y19=retail.filter(d=>d.month.startsWith('2019'));
+  const tot=(+L.total/+P.total-1)*100-inf;
+  return Object.keys(names).map(k=>{
+    const yoy=(+L[k]/+P[k]-1)*100,real=yoy-inf,base=y19.reduce((s,d)=>s+ +d[k],0)/12;
+    const rel=real-tot;
+    const flag=k==='total'?'Benchmark':k==='health_beauty'?'Data break in Jan 2026':rel>1.5?'Rising faster than overall':rel<-3?'Lagging overall':'In line';
+    return {category:names[k],yoy:Math.round(yoy*10)/10,real:Math.round(real*10)/10,vs2019:Math.round((+L[k]/base-1)*1000)/10,flag};
+  });
+}});
+
+dash.calc('treat',{inputs:['retail'],title:'Treat ratio',description:'Restaurant and bar sales divided by grocery store sales each month.',fn:(retail)=>retail.map(d=>({month:d.month,ratio:Math.round(+d.restaurants_bars/+d.groceries*1000)/1000}))});
+
+dash.calc('notes',{inputs:['ind','status','m2lead','cats','treat','profit_ratio','goldera'],title:'What each chart means',description:'One plain-language reading under each chart, with the part that needs attention split out.',fn:(ind,status,m2lead,cats,treat,profit_ratio,goldera)=>{
+  const last=k=>{for(let i=ind.length-1;i>=0;i--)if(ind[i][k]!=null)return {v:ind[i][k],m:ind[i].month,i};return {v:null,m:'',i:-1};};
+  const f1=v=>(Math.round(v*10)/10).toFixed(1);
+  const mon=m=>{const n=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];return n[+m.slice(5)-1]+' '+m.slice(0,4);};
+  const N=[];const add=(id,text,alert)=>N.push({id,text,alert:alert||''});
+  const m2=last('m2_yoy'),c=last('cpi_yoy'),m2a=ind[m2.i-12].m2_yoy;
+  add('money',`Spendable money is growing ${f1(m2.v)}% a year, close to the pre-2020 normal of about 6%. Prices are up ${f1(c.v)}%.`,
+    c.v>3&&m2.v>m2a+1?`Money growth has sped up from ${f1(m2a)}% a year earlier while inflation is already above 3%. That pairing came before the 2021–22 price surge, though on a much smaller scale now.`:'');
+  const best=m2lead.reduce((a,b)=>b.corr>a.corr?b:a);
+  add('lag',`Money growth best matches inflation ${best.lag} months later (match score ${best.corr.toFixed(2)} out of 1). So today's money growth hints at prices in about a year and a half, not next month.`,'');
+  const rp=last('real_pay');
+  add('wage',`Pay is up ${f1(ind[rp.i].pay_yoy)}% from a year earlier and prices ${f1(ind[rp.i].cpi_yoy)}%.`,rp.v<0?`A typical paycheck buys ${f1(-rp.v)}% less than a year ago. ${(()=>{let k=rp.i;while(k>0&&ind[k].real_pay!=null&&ind[k].real_pay<0)k--;let j=k;while(j>0&&!(ind[j].real_pay!=null&&ind[j].real_pay<0))j--;return j>0?`Prices last beat pay in ${ind[j].month.slice(0,4)}.`:'';})()}`:`Paychecks are ahead of prices by ${f1(rp.v)} points, so inflation is not yet squeezing most households.`);
+  const t10=last('t10'),t10a=ind[t10.i-6].t10,rf=last('real_fed');
+  add('rates',`The Fed's rate is ${ind[rf.i].fed_funds.toFixed(2)}%, or ${f1(rf.v)} points above core inflation: a light brake. The 10-year rate is ${ind[t10.i].t10.toFixed(2)}%.`,
+    ind[t10.i].t10-t10a>=0.5?`Long-term rates jumped ${f1(ind[t10.i].t10-t10a)} points in 6 months. Mortgages and business loans get pricier, and stock prices often wobble when this happens.`:'');
+  const cv=last('curve'),inv=ind.filter(d=>d.curve!=null&&d.curve<0).length;
+  add('curve',`The gap is ${cv.v>0?'+':''}${cv.v.toFixed(2)} points: ${cv.v<0?'inverted':'positive again'}. It was inverted for ${inv} months since 2015 without a recession following. The warning was real; the timing was not.`,cv.v<0?'The curve is inverted now. Watch unemployment for confirmation.':'');
+  const g=last('gold_yoy');
+  add('gold',`Gold averaged $${Math.round(ind[g.i].gold).toLocaleString('en-US')} in ${mon(g.m)}, up ${f1(g.v)}% in a year and roughly ${f1(ind[g.i].gold/ind.find(d=>d.gold!=null).gold)}× its 2015 price.`,g.v>25?'That is a fear-level jump. Gold is rising even though safe bonds pay well after inflation, so nervousness and central-bank buying, not interest rates, are driving it.':'');
+  const r=last('real10'),hi=Math.max(...ind.filter(d=>d.real10!=null).map(d=>d.real10));
+  add('real',`A safe 10-year government bond pays ${ind[r.i].t10.toFixed(2)}%. Markets expect about ${(ind[r.i].t10-r.v).toFixed(2)}% inflation a year, so the reward after inflation is ${r.v.toFixed(2)}%. In 2020–21 it was below zero: lenders lost buying power.`,
+    r.v>=hi?`${r.v.toFixed(2)}% is the highest in this chart (since 2015). Investors can earn a real, no-risk return, which raises the bar for stocks, gold and property.`:'');
+  const ge=goldera[1];
+  add('goldera',`Before 2022, when real rates rose, gold fell almost every time (${goldera[0].corr.toFixed(2)}). Since 2022 they have moved together (${ge.corr>0?'+':''}${ge.corr.toFixed(2)}).`,ge.corr>0?'The old rule of thumb has stopped working, so gold is now trading on fear, not rates. That makes it harder to predict.':'');
+  const tot=cats.find(d=>d.category==='All stores'),top=cats.filter(d=>!['All stores','Health and beauty'].includes(d.category)).sort((a,b)=>b.real-a.real);
+  add('cats',`After inflation, total store sales grew ${f1(tot.real)}%: people are buying more, not just paying more. ${top[0].category} grew fastest (${f1(top[0].real)}%); ${top[top.length-1].category.toLowerCase()} trailed prices (${f1(top[top.length-1].real)}%).`,'');
+  const tr=treat[treat.length-1],t19=treat.filter(d=>d.month.startsWith('2019')).reduce((s,d)=>s+d.ratio,0)/12;
+  add('treat',`People spend $${tr.ratio.toFixed(2)} eating out for every $1 at grocery stores, up from about $${t19.toFixed(2)} in 2019. Treats are not being cut.`,'');
+  const s=last('sentiment');
+  add('mood',`Mood is ${f1(s.v)}, about half its pre-2020 level, yet spending is still growing after inflation.`,s.v<55?'Gloomy mood with steady spending is a mismatch. If jobs start to slip, spending usually follows mood down.':'');
+  const p=profit_ratio[profit_ratio.length-1];
+  add('profit',`Companies reported $${p.ratio.toFixed(2)} of profit for every $1 of cash flow in ${p.quarter.replace('-',' ')}, near the long-run average of $${p.avg.toFixed(2)}. Profits look backed by real cash.`,p.ratio>p.avg+p.sd?'Profits are running well ahead of cash. Look for one-off accounting gains.':'');
+  return N;
+}});
+
+dash.calc('brief',{inputs:['ind','status','cats'],title:'Plain-English summary',description:'Five short bullets built from the latest readings.',fn:(ind,status,cats)=>{
+  const st=k=>status.find(d=>d.key===k);const f1=v=>(Math.round(v*10)/10).toFixed(1);
+  const last=k=>{for(let i=ind.length-1;i>=0;i--)if(ind[i][k]!=null)return ind[i];return {};};
+  const B=[];const add=(id,text,level)=>B.push({id,text,level});
+  const cpi=st('cpi'),rp=st('realpay'),jobs=st('jobs'),t=last('t10'),t6=ind[ind.indexOf(t)-6];
+  add('prices',`Prices are rising ${f1(cpi.value)}% a year and pay ${f1(last('pay_yoy').pay_yoy)}%. ${rp.value<0?'Everyday life is getting a little less affordable.':'Paychecks are keeping up.'}`,rp.value<0?'alert':cpi.status);
+  add('jobs',`Jobs are ${jobs.status==='good'?'steady':'weakening'}: unemployment is ${f1(last('unemployment').unemployment)}% and ${jobs.status==='good'?'not rising':'rising'}. This is the reading that would turn a slowdown into a recession.`,jobs.status);
+  add('rates',`Borrowing is getting pricier: the 10-year rate is ${t.t10.toFixed(2)}%, ${t.t10-t6.t10>=0?'up':'down'} ${f1(Math.abs(t.t10-t6.t10))} points in 6 months.`,t.t10-t6.t10>=0.5?'alert':'watch');
+  add('fear',`Big money is nervous: gold is up ${f1(st('gold').value)}% in a year.`,st('gold').status);
+  const tot=cats.find(d=>d.category==='All stores');
+  add('people',`People say they feel gloomy (mood ${f1(st('mood').value)}) but keep spending (store sales up ${f1(tot.real)}% after inflation).`,st('mood').status);
+  add('companies',`Company profits are ${st('profit').status==='good'?'backed by real cash':'running ahead of cash'}, and the economy grew ${f1(st('gdp').value)}% last quarter.`,st('profit').status==='good'&&st('gdp').status==='good'?'good':'watch');
+  return B;
+}});
+dash.calc('briefso',{inputs:['status'],title:'What it means for a long-term investor',description:'One line on how the readings bear on a set-and-forget plan.',fn:(status)=>{
+  const st=k=>status.find(d=>d.key===k);
+  const jobsOk=st('jobs').status==='good',gdpOk=st('gdp').status!=='alert';
+  return [{text:jobsOk&&gdpOk?'The red flags are about prices and nerves, not a breaking economy: jobs and growth are holding. Nothing here is the kind of signal that historically justified stopping regular investing; the reading to watch is unemployment. (Education, not financial advice.)':'Jobs or growth are weakening, the combination that has marked real downturns. That is when an emergency fund matters most; it is still not a reliable timing signal for selling. (Education, not financial advice.)'}];
+}});
+
+/* ---------- drawing helpers ---------- */
+const css=n=>getComputedStyle(document.getElementById('dash-root')).getPropertyValue(n).trim();
+const pm=s=>{const [y,m]=s.split('-');return new Date(Date.UTC(+y,+m-1,1));};
+const pq=s=>{const [y,q]=s.split('-Q');return new Date(Date.UTC(+y,(+q-1)*3+1,15));};
+const fmtM=d3.utcFormat('%b %Y');
+function measure(svg,texts){const t=svg.append('text').attr('font-size','12px');let w=0;texts.forEach(s=>{t.text(s);w=Math.max(w,t.node().getComputedTextLength());});t.remove();return w;}
+function fail(el,st){el.innerHTML='';if(st==='error'||st==='connect'||st==='declined'){const d=document.createElement('div');d.className='mw-fail';d.textContent='Failed to load';el.appendChild(d);}}
+function keys(el,items){el.innerHTML='';items.forEach(it=>{const s=document.createElement('span');const i=document.createElement('i');i.style.background=it.color;s.appendChild(i);s.appendChild(document.createTextNode(it.label));el.appendChild(s);});}
+
+function lineChart(el,rows,o){
+  el.innerHTML='';const W=el.clientWidth||600,H=o.h||240;
+  const svg=d3.select(el).append('svg').attr('width','100%').attr('viewBox',`0 0 ${W} ${H}`).style('display','block').style('overflow','visible');
+  const xs=rows.map(d=>o.parse(d[o.x]));
+  const ys=[];o.series.forEach(s=>rows.forEach(d=>{if(d[s.key]!=null)ys.push(d[s.key]);}));(o.refs||[]).forEach(r=>ys.push(r.y));
+  let y0=d3.min(ys),y1=d3.max(ys);if(o.zero){y0=Math.min(0,y0);}const pad=(y1-y0)*.06||1;
+  const y=d3.scaleLinear([o.zero&&y0===0?0:y0-pad,y1+pad],[H-22,8]).nice(5);
+  const yt=y.ticks(5);const lw=measure(svg,yt.map(o.yfmt))+10;
+  const endW=o.endLabels?measure(svg,o.series.map(s=>s.label+' 00.0%'))+8:8;
+  const x=d3.scaleUtc(d3.extent(xs),[lw,W-Math.min(endW,W*.32)]);
+  const g=svg.append('g');
+  g.selectAll('line.gr').data(yt).join('line').attr('x1',lw).attr('x2',x.range()[1]).attr('y1',d=>y(d)).attr('y2',d=>y(d)).attr('stroke',css('--cds-chart-grid')).attr('stroke-width',1);
+  g.selectAll('text.yl').data(yt).join('text').attr('x',lw-8).attr('y',d=>y(d)).attr('dy','0.32em').attr('text-anchor','end').attr('font-size','12px').attr('fill',css('--color-fg-muted')).text(o.yfmt);
+  const nt=Math.max(2,Math.floor((x.range()[1]-lw)/80));
+  const xt=x.ticks(Math.min(nt,6));
+  g.selectAll('text.xl').data(xt).join('text').attr('x',d=>x(d)).attr('y',H-4).attr('text-anchor','middle').attr('font-size','12px').attr('fill',css('--color-fg-muted')).text(d3.utcFormat('%Y'));
+  if(o.zero&&y.domain()[0]<0)g.append('line').attr('x1',lw).attr('x2',x.range()[1]).attr('y1',y(0)).attr('y2',y(0)).attr('stroke',css('--cds-chart-axis'));
+  (o.refs||[]).forEach(r=>{g.append('line').attr('x1',lw).attr('x2',x.range()[1]).attr('y1',y(r.y)).attr('y2',y(r.y)).attr('stroke',css('--cds-chart-reference')).attr('stroke-dasharray','4 4');
+    g.append('text').attr('x',lw+4).attr('y',y(r.y)-5).attr('font-size','12px').attr('fill',css('--color-fg-muted')).text(r.label);});
+  (o.events||[]).forEach(ev=>{const ex=x(o.parse(ev.x));if(ex<lw||ex>x.range()[1])return;g.append('line').attr('x1',ex).attr('x2',ex).attr('y1',8).attr('y2',H-22).attr('stroke',css('--cds-chart-reference')).attr('stroke-dasharray','2 3');
+    g.append('text').attr('x',ex+3).attr('y',16).attr('font-size','11px').attr('fill',css('--color-fg-muted')).text(ev.label);});
+  o.series.forEach((s,si)=>{
+    const ln=d3.line().defined(d=>d[s.key]!=null).x(d=>x(o.parse(d[o.x]))).y(d=>y(d[s.key]));
+    g.append('path').datum(rows).attr('fill','none').style('stroke',s.color).attr('stroke-width',2).attr('stroke-linecap','round').attr('stroke-linejoin','round').attr('d',ln);
+    const lastD=[...rows].reverse().find(d=>d[s.key]!=null);
+    if(lastD){g.append('circle').attr('cx',x(o.parse(lastD[o.x]))).attr('cy',y(lastD[s.key])).attr('r',3.5).style('fill',s.color);
+      if(o.endLabels){g.append('text').attr('x',x(o.parse(lastD[o.x]))+6).attr('y',y(lastD[s.key])+(s.dy||0)).attr('dy','0.32em').attr('font-size','12px').attr('fill',css('--color-fg')).text(s.label+' '+o.yfmt(lastD[s.key]));}}
+  });
+  // tooltip
+  const tip=document.createElement('div');tip.className='mw-tip';tip.hidden=true;el.appendChild(tip);
+  const dot=g.append('g');const rule=g.append('line').attr('stroke',css('--cds-chart-axis')).attr('y1',8).attr('y2',H-22).attr('opacity',0);
+  const bis=d3.bisector(d=>o.parse(d[o.x])).center;
+  svg.append('rect').attr('x',lw).attr('y',0).attr('width',Math.max(0,x.range()[1]-lw)).attr('height',H-22).attr('fill','transparent')
+   .on('pointermove',ev=>{const [mx]=d3.pointer(ev);const i=bis(rows,x.invert(mx));const d=rows[i];if(!d)return;const px=x(o.parse(d[o.x]));
+     rule.attr('x1',px).attr('x2',px).attr('opacity',1);dot.selectAll('*').remove();
+     tip.innerHTML='';const dd=document.createElement('div');dd.className='d';dd.textContent=o.tfmt?o.tfmt(d[o.x]):fmtM(o.parse(d[o.x]));tip.appendChild(dd);
+     o.series.forEach(s=>{if(d[s.key]==null)return;dot.append('circle').attr('cx',px).attr('cy',y(d[s.key])).attr('r',3.5).style('fill',s.color);
+       const l=document.createElement('div');if(o.series.length>1){const sw=document.createElement('span');sw.className='mw-dot';sw.style.background=s.color;sw.style.marginRight='4px';l.appendChild(sw);}l.appendChild(document.createTextNode((o.series.length>1?s.label+': ':'')+o.yfmt(d[s.key])));tip.appendChild(l);});
+     tip.hidden=false;const tw=tip.offsetWidth;tip.style.left=Math.min(Math.max(0,px/W*el.clientWidth+10),el.clientWidth-tw)+'px';tip.style.top='4px';})
+   .on('pointerleave',()=>{tip.hidden=true;rule.attr('opacity',0);dot.selectAll('*').remove();});
+}
+
+function barChart(el,rows,o){
+  el.innerHTML='';const W=el.clientWidth||600,H=o.h||240;
+  const svg=d3.select(el).append('svg').attr('width','100%').attr('viewBox',`0 0 ${W} ${H}`).style('display','block');
+  const vals=rows.map(d=>d[o.y]).filter(v=>v!=null);
+  const y=d3.scaleLinear([Math.min(0,d3.min(vals)),Math.max(0,d3.max(vals))],[H-22,8]).nice(4);
+  const yt=y.ticks(4);const lw=measure(svg,yt.map(o.yfmt))+10;
+  const x=d3.scaleBand(rows.map(d=>d[o.x]),[lw,W-4]).padding(o.pad==null?.2:o.pad);
+  yt.forEach(t=>{svg.append('line').attr('x1',lw).attr('x2',W-4).attr('y1',y(t)).attr('y2',y(t)).attr('stroke',css('--cds-chart-grid'));
+    svg.append('text').attr('x',lw-8).attr('y',y(t)).attr('dy','0.32em').attr('text-anchor','end').attr('font-size','12px').attr('fill',css('--color-fg-muted')).text(o.yfmt(t));});
+  svg.append('line').attr('x1',lw).attr('x2',W-4).attr('y1',y(0)).attr('y2',y(0)).attr('stroke',css('--cds-chart-axis'));
+  const bw=Math.min(32,x.bandwidth());
+  svg.selectAll('rect.b').data(rows.filter(d=>d[o.y]!=null)).join('rect').attr('x',d=>x(d[o.x])+(x.bandwidth()-bw)/2).attr('width',bw)
+    .attr('y',d=>y(Math.max(0,d[o.y]))).attr('height',d=>Math.max(1,Math.abs(y(d[o.y])-y(0)))).attr('rx',bw>6?3:0).style('fill',o.color);
+  const lab=o.xlabels(rows,x);lab.forEach(([k,t])=>svg.append('text').attr('x',x(k)+x.bandwidth()/2).attr('y',H-4).attr('text-anchor','middle').attr('font-size','12px').attr('fill',css('--color-fg-muted')).text(t));
+  const tip=document.createElement('div');tip.className='mw-tip';tip.hidden=true;el.appendChild(tip);
+  svg.selectAll('rect.h').data(rows).join('rect').attr('x',d=>x(d[o.x])).attr('width',x.step()).attr('y',0).attr('height',H-22).attr('fill','transparent')
+    .on('pointermove',(ev,d)=>{if(d[o.y]==null)return;tip.innerHTML='';const a=document.createElement('div');a.className='d';a.textContent=o.tfmt(d[o.x]);const b=document.createElement('div');b.textContent=o.yfmt(d[o.y]);tip.append(a,b);tip.hidden=false;
+      const px=(x(d[o.x])+x.bandwidth()/2)/W*el.clientWidth;tip.style.left=Math.min(Math.max(0,px+10),el.clientWidth-tip.offsetWidth)+'px';tip.style.top='4px';})
+    .on('pointerleave',()=>{tip.hidden=true;});
+}
+
+function spark(el,rows,key,color,parse){
+  el.innerHTML='';const W=el.clientWidth||200,H=34;
+  const pts=rows.filter(d=>d[key]!=null);if(pts.length<2)return;
+  const svg=d3.select(el).append('svg').attr('width','100%').attr('viewBox',`0 0 ${W} ${H}`).attr('preserveAspectRatio','none').style('display','block');
+  const x=d3.scaleUtc(d3.extent(pts,d=>parse(d)),[2,W-4]);const y=d3.scaleLinear(d3.extent(pts,d=>d[key]),[H-3,3]);
+  svg.append('path').datum(pts).attr('fill','none').style('stroke',color).attr('stroke-width',1.5).attr('stroke-linejoin','round').attr('stroke-linecap','round').attr('vector-effect','non-scaling-stroke').attr('d',d3.line().x(d=>x(parse(d))).y(d=>y(d[key])));
+  const l=pts[pts.length-1];svg.append('circle').attr('cx',x(parse(l))).attr('cy',y(l[key])).attr('r',2.5).style('fill',color);
+}
+
+const SENT_BASE=97;
+const pct=d=>d3.format('.1f')(d)+'%', pts=d=>(d>0?'+':'')+d3.format('.1f')(d), fmtVal=(v,u)=>v==null?'—':u==='%'?d3.format('.1f')(v)+'%':u==='$'?'$'+d3.format(',')(v):u==='pts'?(v>0?'+':'')+d3.format('.1f')(v)+' pts':u==='×'?d3.format('.2f')(v)+'×':d3.format('.1f')(v);
+const fmtPer=p=>p.includes('Q')?p.replace('-',' '):fmtM(pm(p));
+const signed=v=>(v>0?'+':'')+d3.format('.1f')(v)+'%';
+
+function cell(tr,text,cls){const td=document.createElement('td');td.textContent=text;if(cls)td.className=cls;tr.appendChild(td);return td;}
+
+dash.onData(()=>{
+  const C=dash.colors;
+  const ind=dash.data('ind'),st=dash.data('status');
+  // tiles
+  const tiles=document.getElementById('tiles');
+  if(st.status!=='ok'||ind.status!=='ok'){fail(tiles,st.status==='ok'?ind.status:st.status);}
+  else{
+    tiles.innerHTML='';
+    const recent=ind.data.slice(-60);const pr=(dash.data('profit_ratio').data||[]).slice(-20);
+    st.data.forEach(d=>{
+      const t=document.createElement('button');t.type='button';t.className='mw-tile '+d.status;t.id='tile-'+d.key;
+      t.addEventListener('click',()=>{const m=document.getElementById('math-'+d.key);if(m){m.scrollIntoView({behavior:'smooth',block:'center'});m.classList.add('flash');setTimeout(()=>m.classList.remove('flash'),1600);dash.setLink(m.id);}});
+      const lbl=document.createElement('div');lbl.className='lbl';const a=document.createElement('span');a.textContent=d.label;const b=document.createElement('span');b.className='per';b.textContent=fmtPer(d.period);lbl.append(a,b);
+      const v=document.createElement('div');v.className='val';v.textContent=fmtVal(d.value,d.unit);v.dataset.source='status';v.dataset.field='value';v.dataset.where='key='+encodeURIComponent(d.key);
+      const p=document.createElement('span');p.className='mw-pill '+d.status;p.textContent=d.word;
+      const sp=document.createElement('div');sp.className='mw-spark';
+      const n=document.createElement('p');n.className='note';n.textContent=d.note;
+      const go=document.createElement('span');go.className='go';go.textContent='Show the math';
+      t.append(lbl,v,p,sp,n,go);tiles.appendChild(t);
+      const col=d.status==='alert'?css('--color-bad'):d.status==='watch'?css('--color-warn'):css('--color-ok');
+      if(d.spark==='profit')spark(sp,pr,'ratio',col,r=>pq(r.quarter));
+      else if(d.spark)spark(sp,recent,d.spark,col,r=>pm(r.month));
+    });
+  }
+  // money chart
+  const cm=document.getElementById('c-money');
+  if(ind.status==='ok'){const rows=ind.data.filter(d=>d.month>='2016-01');
+    keys(document.getElementById('k-money'),[{label:'Money supply (M2)',color:C[0]},{label:'Inflation (CPI)',color:C[1]}]);
+    lineChart(cm,rows,{x:'month',parse:pm,zero:true,yfmt:v=>d3.format('.0f')(v)+'%',series:[{key:'m2_yoy',label:'M2',color:C[0]},{key:'cpi_yoy',label:'CPI',color:C[1]}],refs:[{y:2,label:'2% target'}],events:[{x:'2020-03',label:'Pandemic'},{x:'2022-06',label:'Inflation peak'}]});}
+  else fail(cm,ind.status);
+  const lag=dash.data('m2lead'),cl=document.getElementById('c-lag');
+  if(lag.status==='ok')barChart(cl,lag.data,{x:'lag',y:'corr',h:160,color:C[0],yfmt:v=>d3.format('.1f')(v),tfmt:k=>k+' months later',xlabels:(rows,x)=>rows.filter(d=>d.lag%6===0).map(d=>[d.lag,d.lag+'m'])});else fail(cl,lag.status);
+  // rates
+  const cr=document.getElementById('c-rates');
+  if(ind.status==='ok'){keys(document.getElementById('k-rates'),[{label:'Fed rate',color:C[0]},{label:'2-year',color:C[2]},{label:'10-year',color:C[1]}]);
+    lineChart(cr,ind.data,{x:'month',parse:pm,zero:true,yfmt:v=>d3.format('.1f')(v)+'%',series:[{key:'fed_funds',label:'Fed',color:C[0]},{key:'t2',label:'2-year',color:C[2]},{key:'t10',label:'10-year',color:C[1]}],events:[{x:'2022-03',label:'Hikes begin'}]});}
+  else fail(cr,ind.status);
+  const cc=document.getElementById('c-curve');
+  if(ind.status==='ok'){
+    const rows=ind.data.filter(d=>d.curve!=null);
+    barChart(cc,rows,{x:'month',y:'curve',pad:0.1,color:css('--cds-chart-muted'),yfmt:v=>(v>0?'+':'')+d3.format('.1f')(v),tfmt:k=>fmtM(pm(k)),xlabels:(rows)=>rows.filter(d=>d.month.endsWith('-01')&&(+d.month.slice(0,4))%2===1).map(d=>[d.month,d.month.slice(0,4)])});
+    d3.select(cc).selectAll('rect').filter(function(){const d=d3.select(this).datum();return d&&d.curve<0&&this.getAttribute('fill')!=='transparent';}).style('fill',css('--cds-chart-status-critical'));
+  } else fail(cc,ind.status);
+  // gold
+  const cg=document.getElementById('c-gold'),crl=document.getElementById('c-real');
+  if(ind.status==='ok'){
+    lineChart(cg,ind.data.filter(d=>d.gold!=null),{x:'month',parse:pm,yfmt:v=>'$'+d3.format(',.0f')(v),series:[{key:'gold',label:'Gold',color:C[3]||C[0]}],events:[{x:'2022-03',label:'Hikes begin'}]});
+    lineChart(crl,ind.data,{x:'month',parse:pm,zero:true,yfmt:v=>d3.format('.1f')(v)+'%',series:[{key:'real10',label:'Real 10-year',color:C[0]}],events:[{x:'2022-03',label:'Hikes begin'}]});
+  } else {fail(cg,ind.status);fail(crl,ind.status);}
+  const ge=dash.data('goldera'),tg=document.getElementById('t-goldera');tg.innerHTML='';
+  if(ge.status==='ok')ge.data.forEach(d=>{const tr=document.createElement('tr');cell(tr,d.era);cell(tr,d3.format('+.2f')(d.corr));cell(tr,d.reading);tg.appendChild(tr);});
+  // spending table
+  const ca=dash.data('cats'),tc=document.getElementById('t-cats');tc.innerHTML='';
+  if(ca.status==='ok')ca.data.forEach(d=>{const tr=document.createElement('tr');cell(tr,d.category);cell(tr,signed(d.yoy));cell(tr,signed(d.real),d.real>=0?'mw-up':'mw-down');cell(tr,signed(d.vs2019));cell(tr,d.flag,'mw-flag');tc.appendChild(tr);});
+  const tr=dash.data('treat'),ct=document.getElementById('c-treat');
+  if(tr.status==='ok')lineChart(ct,tr.data,{x:'month',parse:pm,yfmt:v=>'$'+d3.format('.2f')(v),series:[{key:'ratio',label:'Treat ratio',color:C[1]}],refs:[{y:1,label:'$1 out for $1 in'}],events:[{x:'2020-03',label:'Lockdowns'}]});else fail(ct,tr.status);
+  const cmo=document.getElementById('c-mood');
+  if(ind.status==='ok'){
+    const rows=ind.data.filter(d=>d.month>='2017-01');
+    lineChart(cmo,rows,{x:'month',parse:pm,yfmt:v=>d3.format('.0f')(v),series:[{key:'sentiment',label:'Sentiment',color:C[0]}],refs:[{y:SENT_BASE,label:'Pre-2020 normal'}],events:[{x:'2022-06',label:'Inflation peak'}]});
+  } else fail(cmo,ind.status);
+  // profits
+  const pr=dash.data('profit_ratio'),cp=document.getElementById('c-profit');
+  if(pr.status==='ok'){lineChart(cp,pr.data,{x:'quarter',parse:pq,tfmt:q=>q.replace('-',' '),yfmt:v=>d3.format('.2f')(v),series:[{key:'ratio',label:'Profit per $1 cash',color:C[0]}],refs:[{y:pr.data[0].avg,label:'Average'}],events:[{x:'2017-Q4',label:'Tax law'}]});}
+  else fail(cp,pr.status);
+  // math cards
+  const mc=document.getElementById('mathcards');
+  if(st.status!=='ok')fail(mc,st.status);else{mc.innerHTML='';
+    st.data.forEach(d=>{const c=document.createElement('div');c.className='mw-mathcard';c.id='math-'+d.key;
+      const h=document.createElement('h3');const dot=document.createElement('i');dot.className='mw-dot '+d.status;h.append(dot,document.createTextNode(d.label));
+      const dl=document.createElement('dl');[['Formula',d.math],['Right now',d.example],['Colors',d.rule],['Why it matters',d.why],['Raw data from',d.source]].forEach(([k,v])=>{const dt=document.createElement('dt');dt.textContent=k;const dd=document.createElement('dd');dd.textContent=v;dl.append(dt,dd);});
+      const b=document.createElement('button');b.type='button';b.className='back';b.textContent='Back to the card';b.addEventListener('click',()=>{const t=document.getElementById('tile-'+d.key);if(t){t.scrollIntoView({behavior:'smooth',block:'center'});t.focus({preventScroll:true});}});
+      c.append(h,dl,b);mc.appendChild(c);});}
+  // brief
+  const bl=document.getElementById('brief-list'),br=dash.data('brief');bl.innerHTML='';
+  if(br.status==='ok')br.data.forEach(d=>{const li=document.createElement('li');li.className=d.level;if(d.level==='alert'){const sp=document.createElement('span');sp.className='mw-red';sp.textContent=d.text;li.appendChild(sp);}else li.textContent=d.text;bl.appendChild(li);});
+  else fail(bl,br.status);
+  // single-value text marks
+  document.querySelectorAll('[data-source="summary"],[data-source="briefso"],[data-source="retailmonth"]').forEach(el=>{
+    const d=dash.data(el.dataset.source);const v=d.status==='ok'&&d.data[0]?d.data[0][el.dataset.field]:null;
+    el.textContent=v==null?'—':(el.dataset.source==='retailmonth'?fmtM(pm(v)):String(v));});
+  // notes
+  const nt=dash.data('notes');
+  document.querySelectorAll('.mw-what span[data-source="notes"]').forEach(el=>{
+    if(nt.status!=='ok'){el.textContent='';return;}
+    const id=decodeURIComponent(el.dataset.where.slice(3));const row=nt.data.find(x=>x.id===id);
+    el.textContent=row?row[el.dataset.field]:'';});
+  // wages
+  const cw=document.getElementById('c-wage');
+  if(ind.status==='ok'){keys(document.getElementById('k-wage'),[{label:'Hourly pay',color:C[2]},{label:'Prices (CPI)',color:C[1]}]);
+    lineChart(cw,ind.data.filter(d=>d.month>='2016-01'),{x:'month',parse:pm,zero:true,yfmt:v=>d3.format('.0f')(v)+'%',series:[{key:'pay_yoy',label:'Pay',color:C[2]},{key:'cpi_yoy',label:'Prices',color:C[1]}],events:[{x:'2021-04',label:'Prices pass pay'},{x:'2023-05',label:'Pay catches up'}]});}
+  else fail(cw,ind.status);
+});
+})();
+</script>
+
+</div>
+<p class="mw-foot">Data through <span id="mw-asof">—</span>. Refreshed every Monday by a free bot that downloads public data from the
+Federal Reserve Bank of St. Louis (FRED) and the open gold-prices dataset.
+<a href="https://github.com/moureen-goubran/money-weather">See the code</a>. Education, not financial advice.</p>
+</body>
+</html>
